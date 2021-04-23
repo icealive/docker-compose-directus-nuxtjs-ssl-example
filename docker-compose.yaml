@@ -1,0 +1,96 @@
+# Example docker-compose file for setting up server.
+# Directus as Headless CMS
+# Nuxt.js
+# Swag as Webserver and automantes SSL server from Let's Encrypt
+version: '3.2'
+services:
+  cache:
+    restart: always
+    container_name: cache
+    image: redis:6
+    networks:
+      - directus
+
+  database:
+    restart: always
+    container_name: database
+    image: postgres:12
+    volumes:
+      - ./data/database:/var/lib/postgresql/data
+    networks:
+      - directus
+    environment:
+      POSTGRES_USER: 'directus'
+      POSTGRES_PASSWORD: 'DATABASE_PASSWORD'
+      POSTGRES_DB: 'directus'
+
+  directus:
+    restart: always
+    container_name: directus
+    image: directus/directus:v9.0.0-rc.51
+    ports:
+      - 8055:8055
+    networks:
+      - directus
+    depends_on:
+      - cache
+      - database
+    environment:
+      KEY: 'KEY'
+      SECRET: 'SECRET'
+
+      DB_CLIENT: 'pg'
+      DB_HOST: 'database'
+      DB_PORT: '5432'
+      DB_DATABASE: 'directus'
+      DB_USER: 'directus'
+      DB_PASSWORD: 'DATABASE_PASSWORD'
+
+      CACHE_ENABLED: 'true'
+      CACHE_STORE: 'redis'
+      CACHE_REDIS: 'redis://cache:6379'
+
+      ADMIN_EMAIL: 'admin@example.com'
+      ADMIN_PASSWORD: 'password'
+
+  swag:
+    image: ghcr.io/linuxserver/swag:version-1.14.0
+    container_name: swag
+    cap_add:
+      - NET_ADMIN
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=Asia/Bangkok
+      - URL=*yourdomain.com*
+      - SUBDOMAINS=www,api
+      - VALIDATION=http
+    networks:
+      - directus
+    volumes:
+      - ./config:/config
+    ports:
+      - 443:443
+      - 80:80
+    restart: always
+  
+  node:
+    image: node:lts-alpine3.13
+    container_name: node
+    volumes:
+      - ./www:/usr/src/app/
+    working_dir: /usr/src/app
+    environment:
+      HOST: '0.0.0.0'
+    networks:
+      - directus
+    restart: always
+    ports:
+      - 3000:3000
+    # for production
+    # command: [sh, -c, "yarn add nuxt && yarn build && set NODE_ENV=production && yarn start"]
+    # for development
+    command: [sh, -c, "yarn add nuxt && yarn dev"]
+
+networks:
+  directus:
